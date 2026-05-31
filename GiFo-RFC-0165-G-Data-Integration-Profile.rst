@@ -8,7 +8,7 @@ GiFo-RFC 0165 — G-Data Integration Profile (CCPE-H)
 | Obsoletes: —
 | Category: Standards Track
 | 9 May 2026
-| Version: 0.7 (Working Draft – Under Vendor Review)
+| Version: 0.8 (Working Draft – Under Vendor Review)
 
 **G-Data Integration Profile — Combined Credential and Platform bound Enforcement (CCPE-H)**
 
@@ -2161,69 +2161,47 @@ Lineage emission boundary is the SQL Warehouse for SQL-class operations
 and the compute-cluster for notebook-class operations; the Data-Runtime
 composer normalises both into the §3.5 envelope.
 
-7.8 Snowflake Horizon
-~~~~~~~~~~~~~~~~~~~~~
+7.8 Snowflake Horizon (incl. Cortex Agents REST API)
 
-**Phase-2 integration surface.** Snowflake Horizon governance suite. The
-Data-PEP invokes:
+Phase-2 integration surface. Snowflake Horizon governance suite. The Data-PEP invokes:
+SELECT … FROM SNOWFLAKE.ACCOUNT_USAGE.OBJECT_TAGS and SELECT SYSTEM$GET_TAG('gifo.purpose-allow-list', '<object>', 'TABLE') to resolve dataset_scope and tag-allow-list state;
+SELECT POLICY_REFERENCES(POLICY_NAME => 'gifo_purpose_policy') to enumerate the Row Access and Masking Policies attached to scope-resolved objects;
+SELECT … FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY and SELECT … FROM SNOWFLAKE.ACCOUNT_USAGE.OBJECT_DEPENDENCIES to resolve input-dataset references for §3.5;
+POST https://<account>.snowflakecomputing.com/api/v2/statements (Snowflake SQL API) for synchronous policy-evaluation invocation.
+Authentication is Snowflake key-pair authentication bound to a service-role-assigned user; the bound role holds privileges USAGE on warehouse, USAGE on database/schema, SELECT on declared dataset-scope subset, APPLY MASKING POLICY.
+Projection rules.
+dataset_scope → Snowflake fully-qualified object identifier <database>.<schema>.<object>; classification exclusions project to Tag-based filters using the SYSTEM$GET_TAG predicate.
+purpose → Snowflake Tag gifo.purpose applied at schema or database level with allow-list enumerated; Masking Policies and Row Access Policies attached to a tagged object Must include a current_tag('gifo.purpose-allow-list') predicate that admits the Data-Mandate purpose.
+operations → Snowflake SQL privileges (SELECT, INSERT, UPDATE, DELETE, OWNERSHIP, USAGE).
+data_constraints.tenant_egress_boundary → Snowflake Account boundary; Cross-Cloud Replication and Secure Data Sharing targeting outside-account consumers return Phase-2 deny with egress_outside_tenant_denied.
+data_constraints.no_retraining → Snowflake Tag gifo.no-cortex-train = true honoured by the Data-Runtime when invoking Cortex AI / Cortex Search functions; surfaced as no_retraining_required.
+Reconciliation rule — Tag-based masking vs. Row Access Policies vs. Data Classification. Snowflake evaluates all three server-side at query-compile time; their composition is more-restrictive-wins (Snowflake's native semantics). The Data-PEP receives the composed verdict via the SQL API response. Where Data Classification surfaces a sensitivity-derived obligation that the Data-Mandate's purpose does not cover, Phase-2 returns constrain with the recommended masking. Snowflake Trust Center compliance posture is consulted asynchronously for non-blocking obligations (e.g. flag-only audit annotations) and Must Not block Phase-2 evaluation.
 
-* ``SELECT … FROM SNOWFLAKE.ACCOUNT_USAGE.OBJECT_TAGS`` and ``SELECT
-  SYSTEM$GET_TAG('gifo.purpose-allow-list', '<object>', 'TABLE')`` to
-  resolve ``dataset_scope`` and tag-allow-list state;
-* ``SELECT POLICY_REFERENCES(POLICY_NAME => 'gifo_purpose_policy')`` to
-  enumerate the Row Access and Masking Policies attached to scope-resolved
-  objects;
-* ``SELECT … FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY`` and ``SELECT …
-  FROM SNOWFLAKE.ACCOUNT_USAGE.OBJECT_DEPENDENCIES`` to resolve
-  input-dataset references for §3.5;
-* ``POST https://<account>.snowflakecomputing.com/api/v2/statements``
-  (Snowflake SQL API) for synchronous policy-evaluation invocation.
+Cortex Agents REST API (in-substrate agentic Data-Runtime).
 
-Authentication is Snowflake key-pair authentication bound to a
-service-role-assigned user; the bound role holds privileges ``USAGE`` on
-warehouse, ``USAGE`` on database/schema, ``SELECT`` on declared
-dataset-scope subset, ``APPLY MASKING POLICY``.
+Phase boundary (non-normative orientation). This sub-cookbook changes neither the Phase 1 / Phase 2 boundary nor the §2.5 reconciliation discipline. Phase 1 remains the credential-bound Power-PEP (RFC 0117 16-check pipeline + the ccpe_h_purpose_binding purpose-fit obligation of §9.1); Phase 2 remains the Snowflake-native Data-PDP (Tag-based masking, Row Access Policies, Data Classification, SQL privileges) reconciled more-restrictive-wins. The only extension is the placement of the Phase-1 Data-PEP interception point, now also at the agent-execution boundary in addition to the SQL API path above.
 
-**Projection rules.**
+Interception surface. Where the Data-Runtime is a Snowflake Cortex Agent (Admin object; agentic Planning / Task-Decomposition over the Cortex Agents REST API), the Data-PEP Must intercept at:
+POST https://<account>.snowflakecomputing.com/api/v2/databases/<db>/schemas/<schema>/agents/<agent>:run (Accept: text/event-stream).
+The :run response is a Server-Sent-Events stream. The Data-PEP Must parse the stream and treat each emitted response.tool_use event as a discrete enforcement unit — the agent run is decomposed into one Phase-1 → Phase-2 evaluation per tool call — rather than wrapping the whole :run invocation as a single coarse action. A deployment that can only wrap :run as one unit cannot resolve the operations class per tool call and Must therefore fail-closed to the most-restrictive operation class admitted by the Data-Mandate for the run; such a deployment Must declare the limitation (it cannot claim per-action conformant-order preservation under §3.0 for the agentic path).
+Agent creation (POST …/agents) and deletion (DELETE …/agents/<agent>) are management-plane operations governed by the §7.8 SQL-privilege / role projection unchanged.
 
-* ``dataset_scope`` → Snowflake fully-qualified object identifier
-  ``<database>.<schema>.<object>``; classification exclusions project to
-  Tag-based filters using the ``SYSTEM$GET_TAG`` predicate.
-* ``purpose`` → Snowflake Tag ``gifo.purpose`` applied at schema or
-  database level with allow-list enumerated; Masking Policies and Row
-  Access Policies attached to a tagged object **Must** include a
-  ``current_tag('gifo.purpose-allow-list')`` predicate that admits the
-  Data-Mandate ``purpose``.
-* ``operations`` → Snowflake SQL privileges (SELECT, INSERT, UPDATE,
-  DELETE, OWNERSHIP, USAGE).
-* ``data_constraints.tenant_egress_boundary`` → Snowflake Account boundary;
-  Cross-Cloud Replication and Secure Data Sharing targeting outside-account
-  consumers return Phase-2 deny with ``egress_outside_tenant_denied``.
-* ``data_constraints.no_retraining`` → Snowflake Tag ``gifo.no-cortex-train
-  = true`` honoured by the Data-Runtime when invoking Cortex AI / Cortex
-  Search functions; surfaced as ``no_retraining_required``.
+Tool-call projection. The Data-PEP Must project each response.tool_use by its tool_type:
+cortex_analyst_text_to_sql → the generated SQL statement is the action. The Data-PEP routes the emitted SQL through the §7.8 SQL API path (/statements + POLICY_REFERENCES + SYSTEM$GET_TAG chain) unchanged. operations Must be derived from the verb set of the generated SQL, not from the natural-language prompt; text-to-SQL output is Untrusted until its verb set is resolved.
+cortex_search → the bound search service named in tool_resources, and the base object(s) backing it, are the dataset_scope. operations projects to SELECT-class read over the indexed corpus; Masking and Row Access Policies on the backing base objects continue to apply server-side because the search service executes under the bound role.
+web_search → egress class; see egress disposition below.
 
-**Reconciliation rule — Tag-based masking vs. Row Access Policies vs. Data
-Classification.** Snowflake evaluates all three server-side at
-query-compile time; their composition is more-restrictive-wins
-(Snowflake's native semantics). The Data-PEP receives the composed verdict
-via the SQL API response. Where Data Classification surfaces a
-sensitivity-derived obligation that the Data-Mandate's ``purpose`` does
-not cover, Phase-2 returns constrain with the recommended masking.
-Snowflake Trust Center compliance posture is consulted asynchronously for
-non-blocking obligations (e.g. flag-only audit annotations) and **Must
-Not** block Phase-2 evaluation. Native Cortex agent / function calls as
-Data-Runtime hosts is treated as a deployment-side composition: the
-Data-PEP wraps Cortex invocations in the same Phase-1 → Phase-2 chain.
+web_search egress disposition. The web_search tool reaches the public internet and corresponds to no Snowflake-tagged data asset, so Phase 2 (Horizon) returns no verdict for it. Reconciliation therefore follows the §3.1.2 fail_disposition path exactly as for any Phase-2 no-verdict case: where the Data-Mandate's data_constraints.tenant_egress_boundary does not admit external egress, fail_closed reconciles to deny and fail_drop_egress_only reconciles to deny for this egress-class operation. The Data-PEP Must classify web_search as egress-class before reconciliation and Must Not treat the absent Phase-2 verdict as permit.
 
-**§3.5 lineage source.** Snowflake ``ACCESS_HISTORY`` and
-``OBJECT_DEPENDENCIES`` populate ``input_datasets``; ``output_artefact``
-is the fully-qualified identifier of the derived table / view / share.
-Lineage events latency is bounded by Snowflake's ``ACCOUNT_USAGE``
-propagation (≤ 45 minutes at v0.2 publication); the Data-Runtime composer
-**Must** carry the action's own correlation ID at emission and accept that
-the platform-side ``ACCESS_HISTORY`` row may arrive later than
-``data.lineage_recorded``.
+Agent-definition binding (provisioning-time). The create-agent object carries instructions, models.orchestration, tools, and tool_resources (e.g. the cortex_analyst semantic_model_file and the cortex_search service). This object is a provisioning artifact, not a runtime enforcement decision: it configures the Phase-2 surface (the gifo.purpose / gifo.purpose-allow-list tags on the agent's bound objects) that Phase 2 later evaluates. A conformant deployment Should bind the Data-Mandate purpose to the agent's tool_resources at creation time so the runtime tag-allow-list check resolves deterministically. This binding sits outside the Phase 1 / Phase 2 runtime boundary and alters neither phase.
+
+Orchestration-model data-flow. models.orchestration (e.g. an external foundation model such as claude-4-sonnet) routes prompt and tool-result content through a model host. Where the Data-Mandate carries data_constraints.no_retraining, the deployment Must honour gifo.no-cortex-train = true on every base object reachable by the agent's tools (extending the §7.8 no_retraining projection to the agentic path) and Must surface no_retraining_required on the bridge-emitted decision. The Data-PEP Must Not grant the agent's bound role any APPLY MASKING POLICY exemption: server-side masking composed by Phase 2 Must reach the model host unbypassed.
+
+Authentication addendum. The Cortex Agents REST API additionally accepts Programmatic Access Token (PAT) Bearer authentication (Authorization: Bearer <pat>) alongside the key-pair authentication of the SQL API path. The bound service-role privilege set is unchanged (USAGE on warehouse + database/schema, SELECT on declared dataset-scope subset, APPLY MASKING POLICY) plus USAGE on the Cortex Agent object and its bound tool_resources.
+
+§3.5 lineage source. Snowflake ACCESS_HISTORY and OBJECT_DEPENDENCIES populate input_datasets; output_artefact is the fully-qualified identifier of the derived table / view / share. Lineage events latency is bounded by Snowflake's ACCOUNT_USAGE propagation (≤ 45 minutes at v0.2 publication); the Data-Runtime composer Must carry the action's own correlation ID at emission and accept that the platform-side ACCESS_HISTORY row may arrive later than data.lineage_recorded. For the Cortex Agents path, the :run response header X-Snowflake-Request-Id and the per-tool tool_use_id Must additionally be carried on every data.lineage_recorded and data.action_decided event, threaded with the Data-PEP correlation ID, so that later-arriving ACCESS_HISTORY rows can be joined back to the specific tool_use that produced them.
+
+
 
 7.9 AWS Lake Formation / Glue Data Catalog
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
