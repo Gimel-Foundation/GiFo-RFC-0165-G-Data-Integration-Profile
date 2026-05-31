@@ -1,4 +1,4 @@
-# GiFo-RFC-0165 (V0.7 - Working Draft – Under Review)
+# GiFo-RFC-0165 (V0.8 - Working Draft – Under Review)
 
 G-Data Integration Profile - Combined Credential- and Platform-bound Enforcement (CCPE-H)
 
