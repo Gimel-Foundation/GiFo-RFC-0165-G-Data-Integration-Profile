@@ -7,8 +7,8 @@ GiFo-RFC 0165 — G-Data Integration Profile (CCPE-H)
 | GiFo-Request for Comments: 0165
 | Obsoletes: —
 | Category: Standards Track
-| 9 May 2026
-| Version: 0.8 (Working Draft – Under Vendor Review)
+| 31 May 2026
+| Version: 0.8 (Working Draft – Under Vendor Review, additive §7.8 Cortex Agents expansion)
 
 **G-Data Integration Profile — Combined Credential and Platform bound Enforcement (CCPE-H)**
 
@@ -2162,6 +2162,7 @@ and the compute-cluster for notebook-class operations; the Data-Runtime
 composer normalises both into the §3.5 envelope.
 
 7.8 Snowflake Horizon (incl. Cortex Agents REST API)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Phase-2 integration surface. Snowflake Horizon governance suite. The Data-PEP invokes:
 SELECT … FROM SNOWFLAKE.ACCOUNT_USAGE.OBJECT_TAGS and SELECT SYSTEM$GET_TAG('gifo.purpose-allow-list', '<object>', 'TABLE') to resolve dataset_scope and tag-allow-list state;
